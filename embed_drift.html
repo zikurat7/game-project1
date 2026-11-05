@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ember Drift</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;700&display=swap">
+<style>
+:root{--bg:#e9eef3;--ink:#0d1b2a;--panel:#fff;--muted:#51647a;--ember:#e8890c;--night:#0b1622;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#070e16;--ink:#e6edf4;--panel:#101c2a;--muted:#8da2b8;--ember:#ffb347}}
+:root[data-theme="dark"]{--bg:#070e16;--ink:#e6edf4;--panel:#101c2a;--muted:#8da2b8;--ember:#ffb347}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Bricolage Grotesque",system-ui,sans-serif;display:flex;justify-content:center;min-height:100vh}
+main{width:100%;max-width:440px;padding:16px}
+h1{font-size:1.6rem;margin:4px 0 2px;letter-spacing:-.02em}
+p.sub{margin:0 0 12px;color:var(--muted);font-size:.95rem;max-width:60ch}
+.hud{display:flex;align-items:center;gap:12px;margin-bottom:8px;font-variant-numeric:tabular-nums}
+.bar{flex:1;height:10px;background:var(--panel);border-radius:6px;overflow:hidden;border:1px solid var(--muted)}
+.bar i{display:block;height:100%;width:100%;background:var(--ember);transition:width .1s}
+.stage{position:relative;border-radius:14px;overflow:hidden;background:var(--night)}
+canvas{display:block;width:100%;height:auto;touch-action:none}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:24px;background:rgba(11,22,34,.82);color:#e6edf4}
+.overlay.hide{display:none}
+.overlay h2{margin:0;font-size:1.5rem}
+.overlay p{margin:0;max-width:30ch;color:#a9bbcd}
+button{font:inherit;font-weight:700;background:#ffb347;color:#0b1622;border:0;border-radius:10px;padding:12px 22px;cursor:pointer}
+button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+</style>
+</head>
+<body>
+<main>
+<h1>Ember Drift</h1>
+<p class="sub">Steer a dying ember through the dark. Rain puts it out, sparks feed it, and the less heat you have, the less you can see.</p>
+<div class="hud"><span>Score <b id="score">0</b></span><div class="bar" aria-label="Heat"><i id="heat"></i></div><span>Best <b id="best">0</b></span></div>
+<div class="stage">
+<canvas id="c" width="420" height="560"></canvas>
+<div class="overlay" id="ov">
+<h2 id="ovT">Keep it burning</h2>
+<p id="ovP">Move your mouse, drag, or use the arrow keys. Catch sparks, dodge rain.</p>
+<button id="go">Start</button>
+</div>
+</div>
+</main>
+<script>
+(function(){
+var W=420,H=560,cv=document.getElementById('c'),cx=cv.getContext('2d');
+var $=function(i){return document.getElementById(i)};
+var best=0;try{best=+localStorage.getItem('ember-best')||0}catch(e){}
+$('best').textContent=best;
+var s,run=false,tx=W/2,keys={},last=0,spawn=0;
+function reset(){s={x:W/2,heat:100,score:0,items:[],t:0};tx=W/2;spawn=0}
+function place(e){var r=cv.getBoundingClientRect();tx=(e.clientX-r.left)*W/r.width}
+cv.addEventListener('pointermove',place);
+cv.addEventListener('pointerdown',place);
+addEventListener('keydown',function(e){keys[e.key]=true});
+addEventListener('keyup',function(e){keys[e.key]=false});
+function start(){reset();run=true;$('ov').classList.add('hide');last=performance.now();requestAnimationFrame(loop)}
+$('go').addEventListener('click',start);
+function end(){
+run=false;
+if(s.score>best){best=s.score;try{localStorage.setItem('ember-best',best)}catch(e){}$('best').textContent=best}
+$('ovT').textContent='Burned out at '+s.score;
+$('ovP').textContent=s.score>=best&&s.score>0?'That’s your best run yet.':'Your best is '+best+'. Light it again.';
+$('go').textContent='Play again';
+$('ov').classList.remove('hide')}
+function loop(now){
+if(!run)return;
+var dt=Math.min((now-last)/1000,.05);last=now;
+s.t+=dt;
+if(keys.ArrowLeft||keys.a)tx-=380*dt;
+if(keys.ArrowRight||keys.d)tx+=380*dt;
+tx=Math.max(16,Math.min(W-16,tx));
+s.x+=(tx-s.x)*Math.min(1,dt*14);
+spawn-=dt;
+if(spawn<=0){
+spawn=Math.max(.16,.55-s.t*.006);
+var spark=Math.random()<.22;
+s.items.push({x:20+Math.random()*(W-40),y:-10,spark:spark,v:(spark?110:150)+s.t*3+Math.random()*60})}
+var ey=H-70,r=60+s.heat*1.1;
+for(var i=s.items.length-1;i>=0;i--){
+var o=s.items[i];o.y+=o.v*dt;
+var dx=o.x-s.x,dy=o.y-ey;
+if(dx*dx+dy*dy<22*22){
+if(o.spark){s.heat=Math.min(100,s.heat+14);s.score+=10}else{s.heat-=24}
+s.items.splice(i,1)}
+else if(o.y>H+20){if(!o.spark)s.score+=1;s.items.splice(i,1)}}
+s.heat-=dt*(2.2+s.t*.02);
+$('score').textContent=s.score;
+$('heat').style.width=Math.max(0,s.heat)+'%';
+draw(r,ey);
+if(s.heat<=0){end();return}
+requestAnimationFrame(loop)}
+function draw(r,ey){
+cx.fillStyle='#0b1622';cx.fillRect(0,0,W,H);
+var g=cx.createRadialGradient(s.x,ey,4,s.x,ey,r);
+g.addColorStop(0,'rgba(255,179,71,.55)');g.addColorStop(1,'rgba(255,179,71,0)');
+cx.fillStyle=g;cx.beginPath();cx.arc(s.x,ey,r,0,7);cx.fill();
+for(var i=0;i<s.items.length;i++){
+var o=s.items[i],d=Math.hypot(o.x-s.x,o.y-ey);
+var a=Math.max(.05,Math.min(1,1.4-d/r));
+cx.globalAlpha=a;
+if(o.spark){cx.fillStyle='#ffd37a';cx.beginPath();cx.arc(o.x,o.y,6,0,7);cx.fill()}
+else{cx.strokeStyle='#8fb8de';cx.lineWidth=3;cx.lineCap='round';cx.beginPath();cx.moveTo(o.x,o.y-12);cx.lineTo(o.x,o.y+4);cx.stroke()}}
+cx.globalAlpha=1;
+cx.fillStyle='#ffe3ae';cx.beginPath();cx.arc(s.x,ey,8+s.heat*.04,0,7);cx.fill()}
+reset();draw(120,H-70);
+})();
+</script>
+</body>
+</html>
